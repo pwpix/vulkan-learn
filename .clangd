@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+      - -std=c++23
+      - --target=x86_64-pc-windows-gnu
+      

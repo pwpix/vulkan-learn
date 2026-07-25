@@ -53,6 +53,7 @@ class WIN32_Window_Manager {
 #endif
         }
         assert (isInit == true);
+        HInstance = GetModuleHandle (nullptr);
     }
 
     void startWindowLoop ();
@@ -74,6 +75,16 @@ class WIN32_Window_Manager {
         isInit = false;
     }
 
+    HWND getWindowHandle ()
+    {
+        return Hwnd;
+    }
+
+    HINSTANCE getInstance ()
+    {
+        return HInstance;
+    }
+
     private:
     int createWindow (const WindowConfig& config);
     int destroyWindow ();
@@ -82,8 +93,9 @@ class WIN32_Window_Manager {
     HWND Hwnd           = nullptr;
     HINSTANCE HInstance = nullptr;
     MSG Msg;
-    HDC Hdc   = nullptr;
-    HGLRC Hrc = nullptr;
+    HDC Hdc         = nullptr;
+    HGLRC Hrc       = nullptr;
+    HMODULE hModule = nullptr;
 
     bool isInit    = false;
     bool isRunning = false;

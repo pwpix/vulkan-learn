@@ -85,6 +85,19 @@ class WIN32_Window_Manager {
         return HInstance;
     }
 
+
+    [[maybe_unused]] bool getWindowSize (int* width, int* height)
+    {
+        RECT rect;
+        if (GetClientRect (Hwnd, &rect)) {
+            *width  = (int)rect.bottom - rect.left;
+            *height = (int)rect.bottom - rect.top;
+            return true;
+        }
+        return false;
+    }
+
+
     private:
     int createWindow (const WindowConfig& config);
     int destroyWindow ();

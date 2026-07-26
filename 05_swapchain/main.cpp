@@ -72,8 +72,6 @@ class HelloTriangleApplication {
     vk::SurfaceFormatKHR swapChainSurfaceFormat;
     vk::Extent2D swapChainExtent;
 
-    std::vector<vk::raii::ImageView> swapChainImageViews;
-
     std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
     // internal methods
@@ -92,7 +90,6 @@ class HelloTriangleApplication {
         pickPhysicalDevice ();
         createLogicalDevice ();
         createSwapChain ();
-        createImageViews ();
     }
 
     void mainLoop ()
@@ -351,11 +348,11 @@ class HelloTriangleApplication {
         std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR (*surface);
 
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-            .surface          = *surface,
-            .minImageCount    = minImageCount,
-            .imageFormat      = swapChainSurfaceFormat.format,
-            .imageColorSpace  = swapChainSurfaceFormat.colorSpace,
-            .imageExtent      = swapChainExtent,
+            .surface         = *surface,
+            .minImageCount   = minImageCount,
+            .imageFormat     = swapChainSurfaceFormat.format,
+            .imageColorSpace = swapChainSurfaceFormat.colorSpace,
+            //.imageExtent      = swapChainExtent,
             .imageArrayLayers = 1, // always 1 unless stereoscopic application or overlay stuff
             .imageUsage       = vk::ImageUsageFlagBits::eColorAttachment,
             .imageSharingMode = vk::SharingMode::eExclusive,
@@ -369,26 +366,6 @@ class HelloTriangleApplication {
 
         swapChain       = vk::raii::SwapchainKHR (device, swapChainCreateInfo);
         swapChainImages = swapChain.getImages ();
-    }
-
-    void createImageViews ()
-    {
-        assert (swapChainImageViews.empty ());
-
-        vk::ImageViewCreateInfo imageViewCreateInfo{
-            .viewType         = vk::ImageViewType::e2D,
-            .format           = swapChainSurfaceFormat.format,
-            .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
-        };
-        imageViewCreateInfo.components = {
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity
-        };
-
-        for (auto& image : swapChainImages) {
-            imageViewCreateInfo.image = image;
-            swapChainImageViews.emplace_back (device, imageViewCreateInfo);
-        }
     }
 
     std::vector<const char*> getRequiredInstanceExtensions ()

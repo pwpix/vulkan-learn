@@ -40,6 +40,28 @@ target_compile_definitions(VulkanCppModule
 #end of dummy interface
 
 
+# compiler Slang shaders
+function (add_slang_shader_target TARGET)
+    cmake_parse_arguments("SHADER" "" "" "SOURCES" ${ARGN})
+    set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
+    set(ENTRY_POINTS -entry vertMain -entry fragMain)
+    add_custom_command(
+        OUTPUT ${SHADERS_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
+    )
+
+    add_custom_command(
+        OUTPUT ${SHADERS_DIR}/slang.spv
+        COMMAND ${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
+        WORKING_DIRECTORY ${SHADERS_DIR}
+        DEPENDS ${SHADERS_DIR} ${SHADER_SOURCES}
+        COMMENT "Compiling Slang Shaders"
+        VERBATIM
+    )
+    add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv)
+endfunction()
+
+
 file(GLOB_RECURSE v0_SOURCE_FILES
     "${PROJECT_SOURCE_DIR}/v0/window/*.cpp"
 )
@@ -56,7 +78,6 @@ set(STB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/v0/stb_image.cpp")
 
 add_executable(test ${SOURCES} ${v0_SOURCE_FILES})
 
-
 target_sources(test PRIVATE ${STB_SOURCES})
 target_link_libraries(test PRIVATE
     window
@@ -64,6 +85,10 @@ target_link_libraries(test PRIVATE
     Vulkan::Vulkan
     glfw
 )
+
+set(SHADER_SLANG_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.slang)
+add_slang_shader_target(sh SOURCES ${SHADER_SLANG_SOURCES})
+add_dependencies(test sh)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 target_compile_options(test PRIVATE -fsanitize=address)

@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cassert>
 #include <format>
+#include <ios>
+#include <memory>
 #include <print>
 #include <string>
 #include <unordered_set>
@@ -22,6 +24,7 @@ import vulkan_hpp;
 
 #include <GLFW/glfw3.h>
 
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 
@@ -42,6 +45,23 @@ constexpr bool enableValidationLayers = true;
 #endif
 
 
+// helper to load binary data from files
+static std::vector<char> readFile (const std::string& filename)
+{
+    std::ifstream file (filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open ()) {
+        throw std::runtime_error ("failed to open file!");
+    }
+
+    std::vector<char> buffer (file.tellg ());
+    file.seekg (0, std::ios::beg);
+    file.read (buffer.data (), static_cast<std::streamsize> (buffer.size ()));
+
+    file.close ();
+    return buffer;
+}
+
 class HelloTriangleApplication {
 
     public:
@@ -57,20 +77,19 @@ class HelloTriangleApplication {
     WIN32_Window_Manager winMan;
 
     // Vulkan data members
-    vk::raii::Context context;
-    vk::raii::Instance instance                     = nullptr;
+    vk::raii::Context                context;
+    vk::raii::Instance               instance       = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
-    vk::raii::SurfaceKHR surface                    = nullptr;
-
-    vk::raii::PhysicalDevice physicalDevice = nullptr;
-
-    vk::raii::Device device       = nullptr;
-    vk::raii::Queue graphicsQueue = nullptr;
-
-    vk::raii::SwapchainKHR swapChain = nullptr;
-    std::vector<vk::Image> swapChainImages;
-    vk::SurfaceFormatKHR swapChainSurfaceFormat;
-    vk::Extent2D swapChainExtent;
+    vk::raii::SurfaceKHR             surface        = nullptr;
+    vk::raii::PhysicalDevice         physicalDevice = nullptr;
+    vk::raii::Device                 device         = nullptr;
+    vk::raii::Queue                  graphicsQueue  = nullptr;
+    vk::raii::SwapchainKHR           swapChain      = nullptr;
+    std::vector<vk::Image>           swapChainImages;
+    vk::SurfaceFormatKHR             swapChainSurfaceFormat;
+    vk::Extent2D                     swapChainExtent;
+    vk::raii::PipelineLayout         pipelineLayout   = nullptr;
+    vk::raii::Pipeline               graphicsPipeline = nullptr;
 
     std::vector<vk::raii::ImageView> swapChainImageViews;
 
@@ -93,6 +112,7 @@ class HelloTriangleApplication {
         createLogicalDevice ();
         createSwapChain ();
         createImageViews ();
+        createGraphicsPipeline ();
     }
 
     void mainLoop ()
@@ -176,7 +196,7 @@ class HelloTriangleApplication {
             return;
 
         vk::DebugUtilsMessageSeverityFlagsEXT severityFlags (vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
-        vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags (vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
+        vk::DebugUtilsMessageTypeFlagsEXT     messageTypeFlags (vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
 
         vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT;
 
@@ -209,8 +229,8 @@ class HelloTriangleApplication {
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> ();
 
         bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan11Features> ().shaderDrawParameters &&
-        features.template get<vk::PhysicalDeviceVulkan13Features> ().dynamicRendering &&
-        features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> ().extendedDynamicState;
+                                        features.template get<vk::PhysicalDeviceVulkan13Features> ().dynamicRendering &&
+                                        features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> ().extendedDynamicState;
 
         // Return true if physical device meets all the criteria
         return supportsVulkan1_3 && supportsAllRequiredExtensions && supportsRequiredFeatures;
@@ -231,8 +251,8 @@ class HelloTriangleApplication {
 
     void pickPhysicalDevice ()
     {
-        auto physicalDevices = instance.enumeratePhysicalDevices ();
-        auto const devIter   = std::ranges::find_if (physicalDevices, [&] (auto const& physicalDevice) { return isDeviceSuitable (physicalDevice); });
+        auto       physicalDevices = instance.enumeratePhysicalDevices ();
+        auto const devIter         = std::ranges::find_if (physicalDevices, [&] (auto const& physicalDevice) { return isDeviceSuitable (physicalDevice); });
         if (devIter == physicalDevices.end ()) {
             std::runtime_error ("No GPUs with?? !(UwU)... with Vulkan support...");
         }
@@ -389,6 +409,141 @@ class HelloTriangleApplication {
             imageViewCreateInfo.image = image;
             swapChainImageViews.emplace_back (device, imageViewCreateInfo);
         }
+    }
+
+
+    // helper for shader module
+    [[nodiscard]] vk::raii::ShaderModule createShaderModule (const std::vector<char>& code) const
+    {
+        vk::ShaderModuleCreateInfo createInfo{ .codeSize = code.size () * sizeof (char), .pCode = reinterpret_cast<const uint32_t*> (code.data ()) };
+        vk::raii::ShaderModule     shaderModule (device, createInfo);
+        return shaderModule;
+    }
+
+    void createGraphicsPipeline ()
+    {
+        auto                   shaderCode   = readFile ("shaders/slang.spv");
+        vk::raii::ShaderModule shaderModule = createShaderModule (shaderCode);
+
+        // vertex shader
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+            .stage  = vk::ShaderStageFlagBits::eVertex, // shader stage
+            .module = shaderModule,                     // shader module with the code
+            .pName  = "vertMain"                        // function to invoke
+        };
+
+        // fragment shader
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+            .stage  = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName  = "fragMain"
+        };
+
+        vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // Specify no vertex data to load, because vertices are hardcoded in VS
+        // NOTE: if you have loaded vertex data you need to configure this
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+        // Specify draw primitives, we intend to use only triangles for this application
+        // For 'Strip' topologies: If you use primitiveRestartEnable = vk::True, it's possibe to break up lines and
+        // triangles by using a special index of '0xFFFF' or '0xFFFFFFFF'
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{ .topology = vk::PrimitiveTopology::eTriangleList };
+
+        vk::Viewport viewport{ 0.0f, 0.0f, static_cast<float> (swapChainExtent.width), static_cast<float> (swapChainExtent.height), 0.0f, 1.0f };
+
+        // Scissor rectangle
+        // Viewports and scissor rectangles can be specified as static state or can be dynamic state set in command buffer.
+        // configuring this as dynamic state is often more convinient because we get lot more flexibility
+        // All implementations can handle this dynamic state without a performance penalty.
+        vk::Rect2D scissor{ vk::Offset2D{ 0, 0 }, swapChainExtent };
+
+        // We opt for dynamic state, and enable them for the pipeline respectively
+        std::vector<vk::DynamicState>      dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        vk::PipelineDynamicStateCreateInfo dynamicState{ .dynamicStateCount = static_cast<uint32_t> (dynamicStates.size ()), .pDynamicStates = dynamicStates.data () };
+
+        // we only need to specify the count
+        // for a static state we specify them in the struct and this makes them immutable
+        // We can specify multiple viewports and scissors, this requires enabling a GPU feature
+        // For this purpose the struct members reference an array of them
+        vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .pViewports = &viewport, .scissorCount = 1, .pScissors = &scissor };
+
+        // Rasterizer
+        // rasterizer performs depth testing, face culling and the scissor test
+        // https://en.wikipedia.org/wiki/Z-buffering[depth testing, https://en.wikipedia.org/wiki/Back-face_culling[face culling
+        // We can configure this for filling entire polygons or wireframe rendering
+        // TODO: experiment using other configurations
+        vk::PipelineRasterizationStateCreateInfo rasterizer{
+            .depthClampEnable        = vk::False,
+            .rasterizerDiscardEnable = vk::False,
+            .polygonMode             = vk::PolygonMode::eFill,
+            .cullMode                = vk::CullModeFlagBits::eBack,
+            .frontFace               = vk::FrontFace::eClockwise,
+            .depthBiasEnable         = vk::False, // used for shadowmapping
+            .lineWidth               = 1.0f       // thickness of lines in terms of fragments, maximum line width depends on hardware and >1.0f requires enabling 'wideLines' GPU feature
+        };
+
+        // Multisampling
+        vk::PipelineMultisampleStateCreateInfo multisampling{ .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = vk::False };
+
+        // Depth and stencil buffer
+        // None
+
+        // Color blending
+        // Theres two ways of doing this. 1. mix old and new to produce a final color 2. combine old and new using bitwise operations
+        // There are two structs to configure color blending, vk::PipelineColorBlendAttachmentState contains per attached framebuffer settings,
+        // and vk::PipelineColorBlendStateCreateInfo contains _global_ color blending state
+
+        // This is commonly used when implementing alpha blending, where we blend new color with old color based on opacity
+
+        // This configures the first way of color blending
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment{
+            .blendEnable         = vk::False,
+            .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+            //.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrc1Alpha,
+            .colorBlendOp        = vk::BlendOp::eAdd,
+            .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+            .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+            .alphaBlendOp        = vk::BlendOp::eAdd,
+            .colorWriteMask      = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
+        };
+
+        vk::PipelineColorBlendStateCreateInfo colorBlending{
+            .logicOpEnable = vk::False, // if you want to use the second method of blending (using bitwise combination), set this to vk::True.
+                                        // The bitwise operation can be specified in the logicOp field
+            .logicOp         = vk::LogicOp::eCopy,
+            .attachmentCount = 1,
+            .pAttachments    = &colorBlendAttachment
+        };
+        // we have disabled both modes here, in this case the fragment colors are written to framebuffer unmodified
+
+        // Pipeline layout
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+            .setLayoutCount         = 0,
+            .pushConstantRangeCount = 0
+
+        };
+        pipelineLayout = vk::raii::PipelineLayout (device, pipelineLayoutInfo);
+
+        // Dynamic rendering Pipeline rendering create info to specify format attachments that will be used during rendering.
+        // using struct chaining but each struct can be defined independently
+        vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
+            { .stageCount        = 2,
+            .pStages             = shaderStages,
+            .pVertexInputState   = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState      = &viewportState,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState   = &multisampling,
+            .pColorBlendState    = &colorBlending,
+            .pDynamicState       = &dynamicState,
+            .layout              = pipelineLayout,
+            .renderPass          = nullptr },
+
+            { .colorAttachmentCount = 1, .pColorAttachmentFormats = &swapChainSurfaceFormat.format }
+        };
+
+        // the second parameter which is nullptr references an optional vk::raii::PipelineCache object
+        graphicsPipeline = vk::raii::Pipeline (device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo> ());
     }
 
     std::vector<const char*> getRequiredInstanceExtensions ()

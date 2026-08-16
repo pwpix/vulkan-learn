@@ -85,6 +85,16 @@ AlignAfterOpenBracket: false
 # int ccc  = 23;
 AlignConsecutiveAssignments: true
 
+#AlignConsecutiveDeclarations: (bool) 
+# If true, aligns consecutive assignments.
+# This will align the assignment operators of consecutive lines. This will result in formattings like
+# int 		aaaa = 12;
+# float 	b    = 23;
+# char 		ccc  = 23;
+
+AlignConsecutiveDeclarations: true
+
+
 # AlignEscapedNewlinesLeft (bool)
 # If true, aligns escaped newlines as far left as possible. Otherwise puts them into the right-most column.
 AlignEscapedNewlinesLeft: true
@@ -94,7 +104,7 @@ AlignEscapedNewlinesLeft: true
 # Specifically, this aligns operands of a single expression that needs to be split over multiple lines, e.g.:
 # int aaa = bbbbbbbbbbbbbbb +
 #           ccccccccccccccc;
-AlignOperands: false
+AlignOperands: true
 
 # AlignTrailingComments (bool)
 # If true, aligns trailing comments.
@@ -250,6 +260,11 @@ DerivePointerBinding: false
 # ForEachMacros: ['RANGES_FOR', 'FOREACH']
 # For example: BOOST_FOREACH.
 #ForEachMacros:
+
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
 
 # IncludeCategories (std::vector<IncludeCategory>)
 # Regular expressions denoting the different #include categories used for ordering #includes.

@@ -5,6 +5,8 @@
 
 == Attribution
 
+![](assets/vulkan_triangle.png)
+
 The Khronos Vulkan^®^ Tutorial is based on the "link:https://vulkan-tutorial.com/[Vulkan Tutorial]" by Alexander Overvoorde licensed under link:https://creativecommons.org/licenses/by-sa/4.0/[CC BY-SA 4.0].
 
 The following tutorials were written by Holochip Corporation and released under the link:https://www.apache.org/licenses/LICENSE-2.0[Apache-2.0]:

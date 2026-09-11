@@ -108,6 +108,19 @@ int WIN32_Window_Manager::destroyWindow ()
     return 1;
 }
 
+int WIN32_Window_Manager::processMessages ()
+{
+
+    if (PeekMessage (&Msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage (&Msg);
+        DispatchMessage (&Msg);
+        if (Msg.message == WM_QUIT) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 void WIN32_Window_Manager::startWindowLoop ()
 {
 

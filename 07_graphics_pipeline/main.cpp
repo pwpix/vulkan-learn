@@ -83,7 +83,6 @@ class HelloTriangleApplication {
     vk::raii::SurfaceKHR             surface        = nullptr;
     vk::raii::PhysicalDevice         physicalDevice = nullptr;
     vk::raii::Device                 device         = nullptr;
-    uint32_t                         queueIndex     = ~0;
     vk::raii::Queue                  graphicsQueue  = nullptr;
     vk::raii::SwapchainKHR           swapChain      = nullptr;
     std::vector<vk::Image>           swapChainImages;
@@ -91,14 +90,8 @@ class HelloTriangleApplication {
     vk::Extent2D                     swapChainExtent;
     vk::raii::PipelineLayout         pipelineLayout   = nullptr;
     vk::raii::Pipeline               graphicsPipeline = nullptr;
-    vk::raii::CommandPool            commandPool      = nullptr;
-    vk::raii::CommandBuffer          commandBuffer    = nullptr;
 
     std::vector<vk::raii::ImageView> swapChainImageViews;
-
-    vk::raii::Semaphore presentCompleteSemaphore = nullptr;
-    vk::raii::Semaphore renderFinishedSemaphore  = nullptr;
-    vk::raii::Fence     drawFence                = nullptr;
 
     std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
@@ -120,18 +113,11 @@ class HelloTriangleApplication {
         createSwapChain ();
         createImageViews ();
         createGraphicsPipeline ();
-        createCommandPool ();
-        createCommandBuffer ();
-        createSyncObjects ();
     }
 
     void mainLoop ()
     {
-        // winMan.startWindowLoop ();
-        while (winMan.processMessages () != 0) {
-            drawFrame ();
-        }
-        device.waitIdle ();
+        winMan.startWindowLoop ();
     }
 
     void cleanup ()
@@ -282,7 +268,7 @@ class HelloTriangleApplication {
     {
         std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties ();
 
-        // uint32_t queueIndex = ~0;
+        uint32_t queueIndex = ~0;
 
         // get first index into queue families which support graphics and is present
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size (); ++qfpIndex) {
@@ -314,7 +300,7 @@ class HelloTriangleApplication {
         featureChain = {
             {},
             { .shaderDrawParameters = true },
-            { .synchronization2 = true, .dynamicRendering = true },
+            { .dynamicRendering = true },
             { .extendedDynamicState = true }
         };
 
@@ -558,140 +544,6 @@ class HelloTriangleApplication {
 
         // the second parameter which is nullptr references an optional vk::raii::PipelineCache object
         graphicsPipeline = vk::raii::Pipeline (device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo> ());
-    }
-
-
-    void createCommandPool ()
-    {
-        vk::CommandPoolCreateInfo poolInfo{ .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = queueIndex };
-        commandPool = vk::raii::CommandPool (device, poolInfo);
-    }
-
-    void createCommandBuffer ()
-    {
-        vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
-        commandBuffer = std::move (vk::raii::CommandBuffers (device, allocInfo).front ());
-    }
-
-    void recordCommandBuffer (uint32_t imageIndex)
-    {
-        commandBuffer.begin ({});
-        transition_image_layout (imageIndex,
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        {},
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput);
-
-        vk::ClearValue clearColor = vk::ClearColorValue (0.0f, 0.0f, 0.0f, 1.0f);
-
-        vk::RenderingAttachmentInfo attachmentInfo = {
-            .imageView   = swapChainImageViews[imageIndex],
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp      = vk::AttachmentLoadOp::eClear,
-            .storeOp     = vk::AttachmentStoreOp::eStore,
-            .clearValue  = clearColor
-        };
-
-        vk::RenderingInfo renderingInfo = {
-            .renderArea           = { .offset = { 0, 0 }, .extent = swapChainExtent },
-            .layerCount           = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments    = &attachmentInfo
-        };
-
-        commandBuffer.beginRendering (renderingInfo);
-        commandBuffer.bindPipeline (vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-        commandBuffer.setViewport (0, vk::Viewport (0.0f, 0.0f, static_cast<float> (swapChainExtent.width), static_cast<float> (swapChainExtent.height), 0.0f, 1.0f));
-        commandBuffer.setScissor (0, vk::Rect2D (vk::Offset2D (0, 0), swapChainExtent));
-        commandBuffer.draw (3, 1, 0, 0);
-        commandBuffer.endRendering ();
-
-        transition_image_layout (imageIndex, vk::ImageLayout::eColorAttachmentOptimal, vk ::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits2::eColorAttachmentWrite, {}, vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
-        commandBuffer.end ();
-    }
-
-    void createSyncObjects ()
-    {
-        presentCompleteSemaphore = vk::raii::Semaphore (device, vk::SemaphoreCreateInfo ());
-        renderFinishedSemaphore  = vk::raii::Semaphore (device, vk::SemaphoreCreateInfo ());
-
-        drawFence = vk::raii::Fence (device, { .flags = vk::FenceCreateFlagBits::eSignaled });
-    }
-
-    void drawFrame ()
-    {
-        auto fenceResult = device.waitForFences (*drawFence, vk::True, UINT64_MAX);
-        if (fenceResult != vk::Result::eSuccess) {
-            throw std::runtime_error ("failed to wait for fence!");
-        }
-        device.resetFences (*drawFence);
-        auto [result, imageIndex] = swapChain.acquireNextImage (UINT64_MAX, *presentCompleteSemaphore, nullptr);
-
-        recordCommandBuffer (imageIndex);
-
-        graphicsQueue.waitIdle (); // for now, for simplicity
-
-        vk::PipelineStageFlags waitDestinationStageMask (vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
-            .pWaitSemaphores                                   = &*presentCompleteSemaphore,
-            .pWaitDstStageMask                                 = &waitDestinationStageMask,
-            .commandBufferCount                                = 1,
-            .pCommandBuffers                                   = &*commandBuffer,
-            .signalSemaphoreCount                              = 1,
-            .pSignalSemaphores                                 = &*renderFinishedSemaphore };
-
-        graphicsQueue.submit (submitInfo, *drawFence);
-
-        const vk::PresentInfoKHR presentInfoKHR{ .waitSemaphoreCount = 1, .pWaitSemaphores = &*renderFinishedSemaphore, .swapchainCount = 1, .pSwapchains = &*swapChain, .pImageIndices = &imageIndex };
-
-        result = graphicsQueue.presentKHR (presentInfoKHR);
-        switch (result) {
-        case vk::Result::eSuccess:
-            break;
-        case vk::Result::eSuboptimalKHR:
-            std::cout << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR !\n";
-            break;
-        default:
-            break;
-        }
-    }
-
-    void transition_image_layout (
-    uint32_t                imageIndex,
-    vk::ImageLayout         old_layout,
-    vk::ImageLayout         new_layout,
-    vk::AccessFlags2        src_access_mask,
-    vk::AccessFlags2        dst_access_mask,
-    vk::PipelineStageFlags2 src_stage_mask,
-    vk::PipelineStageFlags2 dst_stage_mask)
-    {
-        vk::ImageMemoryBarrier2 barrier = {
-            .srcStageMask        = src_stage_mask,
-            .srcAccessMask       = src_access_mask,
-            .dstStageMask        = dst_stage_mask,
-            .dstAccessMask       = dst_access_mask,
-            .oldLayout           = old_layout,
-            .newLayout           = new_layout,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = swapChainImages[imageIndex],
-            .subresourceRange    = {
-            .aspectMask     = vk::ImageAspectFlagBits::eColor,
-            .baseMipLevel   = 0,
-            .levelCount     = 1,
-            .baseArrayLayer = 0,
-            .layerCount     = 1 }
-        };
-
-        vk::DependencyInfo dependency_info = {
-            .dependencyFlags         = {},
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers    = &barrier
-        };
-
-        commandBuffer.pipelineBarrier2 (dependency_info);
     }
 
     std::vector<const char*> getRequiredInstanceExtensions ()

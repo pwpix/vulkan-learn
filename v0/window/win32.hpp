@@ -17,15 +17,15 @@ struct WindowConfig {
 
     explicit WindowConfig (
     const char* str /*window name*/,
-    int w /*window width*/,
-    int h /*window height*/
+    int         w /*window width*/,
+    int         h /*window height*/
     ) : windowName (str), windowWidth (w), windowHeight (h)
     {
     }
 
     const char* windowName;
-    int windowHeight;
-    int windowWidth;
+    int         windowHeight;
+    int         windowWidth;
 };
 
 
@@ -85,6 +85,9 @@ class WIN32_Window_Manager {
         return HInstance;
     }
 
+    bool running () noexcept { return isRunning; }
+
+    int processMessages ();
 
     [[maybe_unused]] bool getWindowSize (int* width, int* height)
     {
@@ -103,12 +106,12 @@ class WIN32_Window_Manager {
     int destroyWindow ();
 
     private:
-    HWND Hwnd           = nullptr;
+    HWND      Hwnd      = nullptr;
     HINSTANCE HInstance = nullptr;
-    MSG Msg;
-    HDC Hdc         = nullptr;
-    HGLRC Hrc       = nullptr;
-    HMODULE hModule = nullptr;
+    MSG       Msg;
+    HDC       Hdc     = nullptr;
+    HGLRC     Hrc     = nullptr;
+    HMODULE   hModule = nullptr;
 
     bool isInit    = false;
     bool isRunning = false;
